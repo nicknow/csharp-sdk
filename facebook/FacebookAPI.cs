@@ -144,6 +144,8 @@ namespace Facebook
             return obj;
         }
 
+ 
+
         /// <summary>
         /// Make an HTTP request, with the given query args
         /// </summary>
@@ -153,7 +155,7 @@ namespace Facebook
         /// the key/value pairs for the request</param>
         private string MakeRequest(Uri url, HttpVerb httpVerb,
                                    Dictionary<string, string> args)
-        { 
+        {
             if (args != null && args.Keys.Count > 0 && httpVerb == HttpVerb.GET)
             {
                 url = new Uri(url.ToString() + EncodeDictionary(args, true));
@@ -180,13 +182,131 @@ namespace Facebook
 
             try
             {
-                using (HttpWebResponse response 
+                using (HttpWebResponse response
                         = request.GetResponse() as HttpWebResponse)
                 {
-                    StreamReader reader 
+                    StreamReader reader
                         = new StreamReader(response.GetResponseStream());
 
                     return reader.ReadToEnd();
+                }
+            }
+            catch (WebException e)
+            {
+                throw new FacebookAPIException("Server Error", e.Message);
+            }
+        }
+
+        /// <summary>
+        /// Makes a Facebook Graph API GET request.
+        /// </summary>
+        /// <param name="relativePath">The path for the call,
+        /// e.g. /username</param>
+        /// <param name="args">A dictionary of key/value pairs that
+        /// will get passed as query arguments.</param>
+        public byte[] GetImage(string relativePath,
+                              Dictionary<string, string> args)
+        {
+            return CallImage(relativePath, HttpVerb.GET, args);
+        }
+
+        /// <summary>
+        /// Makes a Facebook Graph API GET request.
+        /// </summary>
+        /// <param name="relativePath">The path for the call,
+        /// e.g. /username</param>
+        public byte[] GetImage(string relativePath)
+        {
+            return CallImage(relativePath, HttpVerb.GET, null);
+        }
+
+        /// <summary>
+        /// Makes a Facebook Graph API Call.
+        /// Added by Nicolas Nowinski (ThinkPlusPlus.com) to support Pictures on 7/18/2010.
+        /// </summary>
+        /// <param name="relativePath">The path for the call, 
+        /// e.g. /username</param>
+        /// <param name="httpVerb">The HTTP verb to use, e.g.
+        /// GET, POST, DELETE</param>
+        /// <param name="args">A dictionary of key/value pairs that
+        /// will get passed as query arguments.</param>
+        private byte[] CallImage(string relativePath,
+                                HttpVerb httpVerb,
+                                Dictionary<string, string> args)
+        {
+            Uri baseURL = new Uri("https://graph.facebook.com");
+            Uri url = new Uri(baseURL, relativePath);
+            if (args == null)
+            {
+                args = new Dictionary<string, string>();
+            }
+            if (!string.IsNullOrEmpty(AccessToken))
+            {
+                args["access_token"] = AccessToken;
+            }
+            
+            byte[] obj = MakeRequestImage(url,httpVerb,args);
+            
+            return obj;
+        }
+
+
+        /// <summary>
+        /// Make an HTTP request, with the given query args
+        /// Added by Nicolas Nowinski (ThinkPlusPlus.com) to support Pictures on 7/18/2010.
+        /// </summary>
+        /// <param name="url">The URL of the request</param>
+        /// <param name="verb">The HTTP verb to use</param>
+        /// <param name="args">Dictionary of key/value pairs that represents
+        /// the key/value pairs for the request</param>
+        private byte[] MakeRequestImage(Uri url, HttpVerb httpVerb,
+                                   Dictionary<string, string> args)
+        {
+            if (args != null && args.Keys.Count > 0 && httpVerb == HttpVerb.GET)
+            {
+                url = new Uri(url.ToString() + EncodeDictionary(args, true));
+            }
+
+            HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
+
+            request.Method = httpVerb.ToString();
+
+            if (httpVerb == HttpVerb.POST)
+            {
+                string postData = EncodeDictionary(args, false);
+
+                ASCIIEncoding encoding = new ASCIIEncoding();
+                byte[] postDataBytes = encoding.GetBytes(postData);
+
+                request.ContentType = "application/x-www-form-urlencoded";
+                request.ContentLength = postDataBytes.Length;
+
+                Stream requestStream = request.GetRequestStream();
+                requestStream.Write(postDataBytes, 0, postDataBytes.Length);
+                requestStream.Close();
+            }
+
+            try
+            {
+                using (HttpWebResponse response
+                        = request.GetResponse() as HttpWebResponse)
+                {
+                    //Credit goes to Greg Beech: http://social.msdn.microsoft.com/Forums/en-US/netfxnetcom/thread/13f919db-b9e0-4978-9bfe-16f0fcf2a51e
+
+                    Stream reader = response.GetResponseStream();
+
+                    MemoryStream cloneStream = new MemoryStream(0x1000);
+                    byte[] buffer = new byte[0x1000];
+                    int bytesInBuffer;
+                    while ((bytesInBuffer = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        cloneStream.Write(buffer, 0, bytesInBuffer);
+                    }
+                    cloneStream.Flush();
+                    byte[] completeData = cloneStream.GetBuffer();
+
+                    return completeData;
+                    //return reader.BaseStream.();
                 }
             }
             catch (WebException e)
